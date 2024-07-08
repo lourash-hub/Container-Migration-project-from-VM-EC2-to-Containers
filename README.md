@@ -468,3 +468,278 @@ By following these steps, you can successfully create a Docker Hub account, set 
 
 ![Images](./Images/Screenshot_11.png)
 
+
+
+Part 3
+1.  Write a Jenkinsfile that will simulate a Docker Build and a Docker Push to the registry
+2.  Connect your repo to Jenkins
+3.  Create a multi-branch pipeline
+4.  Simulate a CI pipeline from a feature and master branch using previously created Jenkinsfile
+5.  Ensure that the tagged images from your Jenkinsfile have a prefix that suggests which branch the image was pushed from. For example,feature-0.0.1.
+6.  Verify that the images pushed from the CI can be found at the registry.
+
+
+# Jenkins Multibranch Pipeline for Docker Build and Push
+
+## Prerequisites
+
+1. **Jenkins** - Ensure Jenkins is installed and running.
+2. **GitHub Repository** - Ensure you have a GitHub repository with the necessary code and Jenkinsfile.
+3. **Docker Hub Account** - Ensure you have a Docker Hub account and credentials.
+4. **Docker Installed** - Ensure Docker is installed on your Jenkins instance.
+
+## Step-by-Step Guide
+
+### 1. Write a Jenkinsfile
+
+Create a Jenkinsfile in your GitHub repository that will build and push Docker images. Below is an example Jenkinsfile:
+
+```groovy
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HUB_CREDENTIALS_ID = 'Dockerhub' // Replace with your actual credentials ID
+        DOCKER_HUB_USERNAME = 'lourash'
+        REPO_NAME = 'php-todo'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    git branch: env.BRANCH_NAME, url: 'https://github.com/lourash-hub/php-todo.git'
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001' // Define your version here or dynamically obtain it
+
+                    // Define image tag with branch prefix
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+
+                    // Build Docker image
+                    sh "docker build -t ${imageTag} ."
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001'
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+                    withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIALS_ID, passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh "echo ${DOCKER_HUB_PASSWORD} | docker login -u ${DOCKER_HUB_USERNAME} --password-stdin"
+                    }
+                    sh "docker push ${imageTag}"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            // Cleanup Docker environment
+            sh 'docker system prune -f'
+        }
+    }
+}
+```
+
+### 2. Connect Your Repo to Jenkins
+
+To connect your GitHub repository to Jenkins:
+
+1. **Go to Jenkins Dashboard**:
+    - Open your Jenkins instance in a web browser and navigate to the Jenkins Dashboard.
+
+2. **Create a New Item**:
+    - Click on `New Item` in the left-hand menu.
+    - Enter a name for your pipeline (e.g., `php-todo-multibranch-pipeline`).
+    - Select `Multibranch Pipeline` as the project type.
+    - Click `OK`.
+
+### 3. Create a Multibranch Pipeline
+
+To create a multibranch pipeline in Jenkins:
+
+1. **Configure Pipeline with GitHub Repository**:
+    - In the configuration page, under `Branch Sources`, click `Add Source` and choose `GitHub`.
+
+2. **Configure GitHub Source**:
+    - **Credentials**: Add your GitHub credentials if not already added. Choose the appropriate credentials from the list.
+    - **Owner**: Enter the GitHub repository owner (in your case, it would be `lourash-hub`).
+    - **Repository**: Enter the repository name (`php-todo`).
+
+3. **Build Configuration**:
+    - Under `Build Configuration`, choose `by Jenkinsfile`.
+
+4. **Scan Repository Triggers**:
+    - Set up the trigger to automatically scan the repository for changes.
+    - Check the option `Periodically if not otherwise run` and set the interval (e.g., `1 hour`).
+
+5. **Save the Configuration**:
+    - Click `Save` to save your Multibranch Pipeline configuration.
+
+### 4. Simulate a CI Pipeline
+
+To simulate a CI pipeline from feature and master branches:
+
+1. **Create Branches**:
+    - Ensure you have both `feature` and `master` branches in your GitHub repository.
+
+2. **Push Code to Branches**:
+    - Push the `Jenkinsfile` to both `feature` and `master` branches.
+
+3. **Jenkins Pipeline Execution**:
+    - Jenkins will automatically discover and run the pipeline for each branch based on the Jenkinsfile.
+
+### 5. Tag Images with Branch Prefix
+
+The provided Jenkinsfile already handles tagging the images with the branch name and build number:
+
+```groovy
+def imageName = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${env.BRANCH_NAME}-${BUILD_NUMBER}"
+```
+
+This will result in tags like `feature-001` or `master-001`.
+
+### 6. Verify Images in Docker Hub
+
+To verify that the images pushed from the CI can be found at the registry:
+
+1. **Log in to Docker Hub**:
+    - Open Docker Hub in your web browser and log in with your credentials.
+
+2. **Navigate to Your Repository**:
+    - Go to `https://hub.docker.com/repository/docker/lourash/php-todo` to see the images pushed from Jenkins.
+
+3. **Check the Tags**:
+    - Ensure the images have tags corresponding to the branch names and build numbers (e.g., `feature-001`, `master-001`).
+
+### Troubleshooting Docker Issues on Red Hat
+
+If you encounter issues with Docker and Podman, follow these steps:
+
+1. **Uninstall Podman and its associated packages**:
+    ```bash
+    sudo yum remove -y podman podman-docker
+    ```
+
+2. **Add the Docker repository**:
+    ```bash
+    sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    ```
+
+3. **Install Docker**:
+    ```bash
+    sudo yum install -y docker-ce docker-ce-cli containerd.io
+    ```
+
+4. **Start and enable Docker service**:
+    ```bash
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    ```
+
+5. **Add Jenkins user to Docker group**:
+    ```bash
+    sudo usermod -aG docker jenkins
+    ```
+
+6. **Restart Jenkins and Docker services**:
+    ```bash
+    sudo systemctl restart jenkins
+    sudo systemctl restart docker
+    ```
+
+
+![Images](./Images/Screenshot_14.png)
+![Images](./Images/Screenshot_15.png)
+![Images](./Images/Screenshot_16.png)
+
+
+#   Deployment with Docker Compose
+All we have done until now required quite a lot of effort to create an image and launch an application inside it. We should not have to always run Docker commands on the terminal to get our applications up and running. There are solutions that make it easy to write declarative code in YAML, and get all the applications and dependencies up and running with minimal effort by launching a single command.
+In this section, we will refactor the Tooling app POC so that we can leverage the power of Docker Compose.
+1. First, install Docker Compose on your workstation
+2.  Create a file, name it tooling.yaml
+3.  Begin to write the Docker Compose definitions with YAML syntax. The YAML file is used for defining services,networks, and volumes:
+
+```bash
+version: "3.9"
+services:
+  tooling_frontend:
+    build: .
+    ports:
+      - "5000:80"
+    volumes:
+      - tooling_frontend:/var/www/html
+```
+
+The YAML file has declarative fi elds, and it is vital to understand what they are used for.
+version: Is used to specify the version of Docker Compose API that the Docker Compose engine will connect to.This field is optional from docker compose version v1.27.0. You can verify your installed version with:
+
+```bash
+docker-compose --version
+docker-compose version 1.28.5, build c4eb3a1f
+```
+
+service: A service definition contains a confi guration that is applied to each container started for that service. In the snippet above, the only service listed there is tooling_frontend. So, every other field under the tooling_frontend service will execute some commands that relate only to that service. Therefore, all the below-listed fields relate to the tooling_frontend service.
+*   build
+*   port
+*   volumes
+*   links
+
+Let us fill up the entire file and test our application:
+
+version: "3.9"
+services:
+  tooling_frontend:
+    build: .
+    ports:
+      - "5000:80"
+    volumes:
+      - tooling_frontend:/var/www/html
+    links:
+      - db
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      MYSQL_DATABASE: <The database name required by Tooling app >
+      MYSQL_USER: <The user required by Tooling app >
+      MYSQL_PASSWORD: <The password required by Tooling app >
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db:/var/lib/mysql
+volumes:
+  tooling_frontend:
+  db:
+
+
+Here's a breakdown of the fields specified in the Docker Compose file `tooling.yaml`:
+
+
+- `version: "3.9"`: Specifies the version of the Docker Compose file format.
+- `services`: Defines the services that make up the application.
+  - `tooling_frontend`:
+    - `build: .`: Builds the Docker image for this service using the Dockerfile in the current directory.
+    - `ports`: Maps port 5000 on the host to port 80 on the container.
+    - `volumes`: Mounts a named volume `tooling_frontend` to `/var/www/html` in the container.
+    - `links`: Links this service to the `db` service, allowing them to communicate.
+  - `db`:
+    - `image: mysql:5.7`: Uses the MySQL 5.7 Docker image for this service.
+    - `restart: always`: Ensures the container always restarts if it stops.
+    - `environment`: Sets environment variables for the MySQL container.
+      - `MYSQL_DATABASE`: The name of the database required by the Tooling app.
+      - `MYSQL_USER`: The MySQL user required by the Tooling app.
+      - `MYSQL_PASSWORD`: The password for the MySQL user.
+      - `MYSQL_RANDOM_ROOT_PASSWORD: '1'`: Generates a random root password.
+    - `volumes`: Mounts a named volume `db` to `/var/lib/mysql` in the container.
+- `volumes`: Defines named volumes that can be shared and reused between services.
+  - `tooling_frontend`: Named volume for the `tooling_frontend` service.
+  - `db`: Named volume for the `db` service
