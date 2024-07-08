@@ -721,6 +721,16 @@ volumes:
   db:
 
 
+
+    ![Images](./Images/Screenshot_17.png)
+
+Practice Task №2 - Complete Continous Integration With A Test Stage
+1.Document your understanding of all the fi elds specifi ed in the Docker Compose file tooling.yaml
+2.Update your Jenkinsfile with a test stage before pushing the image to the registry.
+3.What you will be testing here is to ensure that the tooling site http endpoint is able to return status code 200.Any other code will be determined a stage failure.
+4.Implement a similar pipeline for the PHP-todo app.
+5.Ensure that both pipelines have a clean-up stage where all the images are deleted on the Jenkins server
+
 Here's a breakdown of the fields specified in the Docker Compose file `tooling.yaml`:
 
 
@@ -743,3 +753,208 @@ Here's a breakdown of the fields specified in the Docker Compose file `tooling.y
 - `volumes`: Defines named volumes that can be shared and reused between services.
   - `tooling_frontend`: Named volume for the `tooling_frontend` service.
   - `db`: Named volume for the `db` service
+
+### Jenkinsfile for Tooling Application
+
+```groovy
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HUB_CREDENTIALS_ID = 'Dockerhub'
+        DOCKER_HUB_USERNAME = 'lourash'
+        REPO_NAME = 'tooling-app'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    git branch: 'main', url: 'https://github.com/lourash-hub/tooling-app.git'
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001' // Define your version here or dynamically obtain it
+
+                    // Define image tag with branch prefix
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+
+                    // Build Docker image
+                    sh "docker build -t ${imageTag} ."
+                }
+            }
+        }
+        stage('Test Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001'
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+
+                    // Run the container
+                    sh "docker run -d --name test_container -p 5000:80 ${imageTag}"
+                    
+                    // Wait for a few seconds to ensure the container is up
+                    sh "sleep 10"
+
+                    // Test the HTTP endpoint to ensure it returns status code 200
+                    sh """
+                    STATUS_CODE=\$(curl -o /dev/null -s -w "%{http_code}" http://localhost:5000)
+                    if [ "\$STATUS_CODE" -ne 200 ]; then
+                        echo "HTTP endpoint returned status code \$STATUS_CODE"
+                        exit 1
+                    fi
+                    """
+
+                    // Clean up the test container
+                    sh "docker rm -f test_container"
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001'
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+                    withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIALS_ID, passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh "echo ${DOCKER_HUB_PASSWORD} | docker login -u ${DOCKER_HUB_USERNAME} --password-stdin"
+                    }
+                    sh "docker push ${imageTag}"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            // Cleanup Docker environment
+            sh 'docker system prune -f'
+        }
+    }
+}
+```
+
+### Jenkinsfile for PHP-Todo Application
+
+```groovy
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HUB_CREDENTIALS_ID = 'Dockerhub'
+        DOCKER_HUB_USERNAME = 'lourash'
+        REPO_NAME = 'php-todo'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    git branch: 'main', url: 'https://github.com/lourash-hub/php-todo.git'
+                }
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001' // Define your version here or dynamically obtain it
+
+                    // Define image tag with branch prefix
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+
+                    // Build Docker image
+                    sh "docker build -t ${imageTag} ."
+                }
+            }
+        }
+        stage('Test Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001'
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+
+                    // Run the container
+                    sh "docker run -d --name test_container -p 5000:80 ${imageTag}"
+                    
+                    // Wait for a few seconds to ensure the container is up
+                    sh "sleep 10"
+
+                    // Test the HTTP endpoint to ensure it returns status code 200
+                    sh """
+                    STATUS_CODE=\$(curl -o /dev/null -s -w "%{http_code}" http://localhost:5000)
+                    if [ "\$STATUS_CODE" -ne 200 ]; then
+                        echo "HTTP endpoint returned status code \$STATUS_CODE"
+                        exit 1
+                    fi
+                    """
+
+                    // Clean up the test container
+                    sh "docker rm -f test_container"
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    def branchName = env.BRANCH_NAME
+                    def version = '001'
+                    def imageTag = "${DOCKER_HUB_USERNAME}/${REPO_NAME}:${branchName}-${version}"
+                    withCredentials([usernamePassword(credentialsId: env.DOCKER_HUB_CREDENTIALS_ID, passwordVariable: 'DOCKER_HUB_PASSWORD', usernameVariable: 'DOCKER_HUB_USERNAME')]) {
+                        sh "echo ${DOCKER_HUB_PASSWORD} | docker login -u ${DOCKER_HUB_USERNAME} --password-stdin"
+                    }
+                    sh "docker push ${imageTag}"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            // Cleanup Docker environment
+            sh 'docker system prune -f'
+        }
+    }
+}
+```
+
+
+
+- **Test Docker Image Stage**: Both Jenkinsfiles have a test stage that runs the built Docker image as a container and checks if the HTTP endpoint returns a status code 200. If the status code is not 200, the build fails.
+  - **Run the Container**: Starts the container in detached mode.
+  - **Wait for the Container**: Waits for a few seconds to ensure the container is fully up and running.
+  - **Test the Endpoint**: Uses `curl` to check if the endpoint returns status code 200.
+  - **Clean Up**: Removes the test container after testing.
+
+- **Post Section**: The `post` section always runs a Docker system prune command to clean up the Docker environment, removing unused containers, networks, images, and optionally, volumes.
+
+### Steps to Implement the Jenkins Pipelines
+
+1. **Create the Jenkinsfiles**:
+   - Create separate `Jenkinsfile`s for the Tooling and PHP-Todo applications with the content provided above.
+
+2. **Connect Your Repos to Jenkins**:
+   - In your Jenkins dashboard, create new items (multibranch pipelines) for both the Tooling and PHP-Todo applications.
+   - Configure the GitHub repository URLs and add credentials if necessary.
+
+3. **Create Multi-Branch Pipelines**:
+   - Jenkins will automatically detect branches with a `Jenkinsfile` and create corresponding jobs.
+
+4. **Simulate CI Pipeline**:
+   - Make changes to both the feature and master branches to trigger builds.
+   - Ensure the tagged images from the `Jenkinsfile` have a prefix indicating the branch.
+
+5. **Verify Pushed Images**:
+   - Check the Docker Hub repository to verify that the images have been pushed correctly with the appropriate tags.
+
+6. **Clean-Up Stage**:
+   - The `post` section always runs a Docker system prune command to clean up the Docker environment, removing unused containers, networks, images, and optionally, volumes.
+
+
+
+
+   ![Images](./Images/Screenshot_18.png)
